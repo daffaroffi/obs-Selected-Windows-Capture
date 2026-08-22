@@ -1,0 +1,120 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float2 texel;
+uniform float radius;
+
+sampler_state texSampler {
+	Filter      = Linear;
+	AddressU    = Clamp;
+	AddressV    = Clamp;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in)
+{
+	VertData vert_out;
+	vert_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	vert_out.uv = v_in.uv;
+	return vert_out;
+}
+
+float4 Load(float2 uv)
+{
+	return image.Sample(texSampler, uv);
+}
+
+float4 Finish(float4 c)
+{
+	return saturate(c);
+}
+
+float4 PSGaussian(VertData v_in) : TARGET
+{
+	float s = max(radius, 0.25);
+	float2 o1 = texel * 1.3846153846 * s;
+	float2 o2 = texel * 3.2307692308 * s;
+	float4 c = Load(v_in.uv) * 0.2270270270;
+	c += Load(v_in.uv + o1) * 0.3162162162;
+	c += Load(v_in.uv - o1) * 0.3162162162;
+	c += Load(v_in.uv + o2) * 0.0702702703;
+	c += Load(v_in.uv - o2) * 0.0702702703;
+	return Finish(c);
+}
+
+float4 PSBox(VertData v_in) : TARGET
+{
+	float2 o = texel * max(radius, 0.25);
+	float4 c = Load(v_in.uv);
+	c += Load(v_in.uv + o);
+	c += Load(v_in.uv - o);
+	c += Load(v_in.uv + o * 2.0);
+	c += Load(v_in.uv - o * 2.0);
+	c += Load(v_in.uv + o * 3.0);
+	c += Load(v_in.uv - o * 3.0);
+	return Finish(c / 7.0);
+}
+
+float4 PSKawaseDown(VertData v_in) : TARGET
+{
+	float2 o = texel * (max(radius, 0.0) + 0.5);
+	float4 c = Load(v_in.uv) * 4.0;
+	c += Load(v_in.uv + float2(-o.x, -o.y));
+	c += Load(v_in.uv + float2(-o.x, o.y));
+	c += Load(v_in.uv + float2(o.x, -o.y));
+	c += Load(v_in.uv + float2(o.x, o.y));
+	return Finish(c / 8.0);
+}
+
+float4 PSKawaseUp(VertData v_in) : TARGET
+{
+	float2 o = texel * (max(radius, 0.0) + 0.5);
+	float4 c = Load(v_in.uv + float2(-o.x, 0.0));
+	c += Load(v_in.uv + float2(o.x, 0.0));
+	c += Load(v_in.uv + float2(0.0, -o.y));
+	c += Load(v_in.uv + float2(0.0, o.y));
+	c += Load(v_in.uv + float2(-o.x, -o.y) * 0.5) * 2.0;
+	c += Load(v_in.uv + float2(-o.x, o.y) * 0.5) * 2.0;
+	c += Load(v_in.uv + float2(o.x, -o.y) * 0.5) * 2.0;
+	c += Load(v_in.uv + float2(o.x, o.y) * 0.5) * 2.0;
+	return Finish(c / 12.0);
+}
+
+technique Gaussian
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSGaussian(v_in);
+	}
+}
+
+technique Box
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSBox(v_in);
+	}
+}
+
+technique KawaseDown
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSKawaseDown(v_in);
+	}
+}
+
+technique KawaseUp
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSKawaseUp(v_in);
+	}
+}

@@ -1,0 +1,174 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform float2 texel;
+uniform float block;
+
+sampler_state pointSampler {
+	Filter      = Point;
+	AddressU    = Clamp;
+	AddressV    = Clamp;
+};
+
+sampler_state linearSampler {
+	Filter      = Linear;
+	AddressU    = Clamp;
+	AddressV    = Clamp;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in)
+{
+	VertData vert_out;
+	vert_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	vert_out.uv = v_in.uv;
+	return vert_out;
+}
+
+float2 Pixel(float2 uv)
+{
+	return uv / max(texel, float2(1e-6, 1e-6));
+}
+
+float4 SamplePx(float2 px)
+{
+	return image.Sample(pointSampler, px * texel);
+}
+
+float4 PSSquare(VertData v_in) : TARGET
+{
+	float size = max(block, 1.0);
+	float2 snapped = (floor(Pixel(v_in.uv) / size) + 0.5) * size;
+	return SamplePx(snapped);
+}
+
+float4 PSHex(VertData v_in) : TARGET
+{
+	float size = max(block, 1.0);
+	float2 p = Pixel(v_in.uv) / size;
+	float row = floor(p.y);
+	p.x += fmod(row, 2.0) * 0.5;
+	float2 cell = floor(p) + 0.5;
+	cell.x -= fmod(floor(cell.y), 2.0) * 0.5;
+	return SamplePx(cell * size);
+}
+
+float4 PSDiamond(VertData v_in) : TARGET
+{
+	float size = max(block, 1.0);
+	float2 p = Pixel(v_in.uv);
+	float2 r = float2(p.x + p.y, p.x - p.y);
+	r = (floor(r / size) + 0.5) * size;
+	float2 snapped = float2((r.x + r.y) * 0.5, (r.x - r.y) * 0.5);
+	return SamplePx(snapped);
+}
+
+float2 HexDotCenter(float col, float row, float w, float h)
+{
+	float parity = row - 2.0 * floor(row * 0.5);
+	return float2(col * w + parity * w * 0.5, row * h);
+}
+
+float4 PSCircle(VertData v_in) : TARGET
+{
+	float w = max(block, 1.0);
+	float h = w * 0.866025404;
+	float2 px = Pixel(v_in.uv);
+	float row = floor(px.y / h + 0.5);
+	float parity = row - 2.0 * floor(row * 0.5);
+	float col = floor((px.x - parity * w * 0.5) / w + 0.5);
+	float bestD2 = 1e12;
+	float2 bestC = px;
+	float dr;
+	float dc;
+
+	for (dr = -1.0; dr <= 1.0; dr += 1.0) {
+		for (dc = -1.0; dc <= 1.0; dc += 1.0) {
+			float2 c = HexDotCenter(col + dc, row + dr, w, h);
+			float2 d = px - c;
+			float d2 = dot(d, d);
+			if (d2 < bestD2) {
+				bestD2 = d2;
+				bestC = c;
+			}
+		}
+	}
+
+	float R = w * 0.5;
+	if (bestD2 <= R * R)
+		return SamplePx(bestC);
+	return float4(0.0, 0.0, 0.0, 1.0);
+}
+
+float4 PSBarH(VertData v_in) : TARGET
+{
+	float size = max(block, 1.0);
+	float2 px = Pixel(v_in.uv);
+	px.y = (floor(px.y / size) + 0.5) * size;
+	return SamplePx(px);
+}
+
+float4 PSBarV(VertData v_in) : TARGET
+{
+	float size = max(block, 1.0);
+	float2 px = Pixel(v_in.uv);
+	px.x = (floor(px.x / size) + 0.5) * size;
+	return SamplePx(px);
+}
+
+technique Square
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSSquare(v_in);
+	}
+}
+
+technique Hex
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSHex(v_in);
+	}
+}
+
+technique Diamond
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSDiamond(v_in);
+	}
+}
+
+technique Circle
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSCircle(v_in);
+	}
+}
+
+technique BarH
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSBarH(v_in);
+	}
+}
+
+technique BarV
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSBarV(v_in);
+	}
+}

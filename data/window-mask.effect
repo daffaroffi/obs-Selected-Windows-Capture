@@ -1,0 +1,46 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+uniform texture2d mask;
+
+sampler_state imageSampler {
+	Filter      = Linear;
+	AddressU    = Clamp;
+	AddressV    = Clamp;
+	BorderColor = 00000000;
+};
+
+sampler_state maskSampler {
+	Filter      = Point;
+	AddressU    = Clamp;
+	AddressV    = Clamp;
+	BorderColor = 00000000;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in)
+{
+	VertData vert_out;
+	vert_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	vert_out.uv = v_in.uv;
+	return vert_out;
+}
+
+float4 PSMask(VertData v_in) : TARGET
+{
+	float4 c = image.Sample(imageSampler, v_in.uv);
+	float m = mask.Sample(maskSampler, v_in.uv).r;
+	return c * m;
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSMask(v_in);
+	}
+}
